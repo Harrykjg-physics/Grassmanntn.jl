@@ -380,7 +380,7 @@ end
 
 function compute_exp_hbond(
     Tbulk::Matrix{Grassmann{Q1, 4}},
-    peps::Square_GPEPS{Q2},
+    peps::Square_GPEPS{Q1},
     H_bond::Grassmann{Q2, 4},
     env::CTMRGEnv) where {Q1, Q2}
 
@@ -604,7 +604,7 @@ end
 
 function compute_exp_vbond(
     Tbulk::Matrix{Grassmann{Q1, 4}}, 
-    peps::Square_GPEPS{Q2}, 
+    peps::Square_GPEPS{Q1}, 
     H_bond::Grassmann{Q2, 4}, 
     env::CTMRGEnv) where {Q1, Q2}
 

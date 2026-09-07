@@ -13,8 +13,12 @@ import GrassmannTensorNetworks: Grassmann, AbstractGrassmann, GrassmannScalar, G
     add_parity_sign, add_perm_sign,
     index_conjugation, prepare_range_dict,
     _parity_mask, _fixed_parity_blocks, _similar_arraytype,
+    Nmod, CTMRGEnv,
     conjugate, fuse, calculate_sectors, calculate_fused_size, prepare_fused_info,
-    trace, contract, gsvd, gevd, gortho, truncation, check_parity
+    trace, contract, gsvd, gevd, gortho, truncation, check_parity,
+    reduced_tensor, reduced_tensor_alpha,
+    compute_exp_hbond, compute_exp_vbond,
+    compute_exp_hbond_alpha, compute_exp_vbond_alpha
 
 import GrassmannTensorNetworks:
     NestedLayout, NestedNetwork,
@@ -51,6 +55,9 @@ include("fusion.jl")
 
 # AD rules for decomp.jl (gsvd, gevd, gortho)
 include("decomp.jl")
+
+# AD rules for CTMRG measurements
+include("measurements.jl")
 
 include(joinpath(
     @__DIR__, "..", "..", "algorithms", "Nested_CTMRG", "nested_chainrules.jl"

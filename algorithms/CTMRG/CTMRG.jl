@@ -191,10 +191,10 @@ end
 
 # Monitor the energy convergence
 function run_GCTMRG!(
-    peps::Square_GPEPS,
-    T_bulk::Matrix{Grassmann{Q, 4}}, 
-    H_bond::Grassmann{Q, 4}, 
-    ctmrg_env::CTMRGEnv, 
+    peps::Square_GPEPS{Q1},
+    T_bulk::Matrix{Grassmann{Q1, 4}}, 
+    H_bond::Grassmann{Q2, 4}, 
+    ctmrg_env::CTMRGEnv{Q1}, 
     χ::Int; 
     ctmrg_iter::Int=100, 
     ctmrg_tol::Float64=1e-12, 
@@ -202,7 +202,7 @@ function run_GCTMRG!(
     average_trunc::Bool=false, 
     verbosity::Int=0, 
     save_iter::Int=0, 
-    save_filename::String="ctmrg_env") where {Q}
+    save_filename::String="ctmrg_env") where {Q1, Q2}
  
     Lx, Ly = size(T_bulk)
 
@@ -211,6 +211,7 @@ function run_GCTMRG!(
 
     Λd_iter, Λu_iter, Λl_iter, Λr_iter = prepare_Λ(Lx, Ly, χ)
 
+    Q = promote_type(Q1, Q2)
     expval_avg_tmp = one(Q)
     count = 0
 
