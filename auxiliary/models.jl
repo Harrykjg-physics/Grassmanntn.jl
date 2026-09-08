@@ -347,6 +347,202 @@ function gate(model::HubbardModel, dτ::Real)
     G_out = add_perm_sign(G, (1, 2, 4, 3))
 end
 
+"""
+2D bilayer Fermi-Hubbard model on the square lattice
+
+H = -t ∑_(⟨i,j⟩,σα) (c†_{iσα} c_{jσα} + h.c.)
+    + U ∑_i (n_{i↑α} - 1/2)(n_{i↓α} - 1/2)
+    - μ ∑_(iα)(n_i↑α + n_i↓α)
+    + J ∑_i S_{i1} ⋅ S_{i2}
+
+The local basis is (|0>, |↑>, |↓>, |↑↓>) for each layer,
+therefore, the local basis for the bilayer model is the tensor product of the two layers, which has 16 states :
+(|01>, |↑1>, |↓1>, |↑↓1>) ⊗ (|02>, |↑2>, |↓2>, |↑↓2>) :
+
+The first 8 states are even-parity states, which are numbered as follows :
+
+    | 01 ; 02 > : 1
+    | 01 ; D2 > : 2
+    | D1 ; 02 > : 3
+    | D1 ; D2 > : 4
+    | ↑1 ; ↑2 > : 5
+    | ↑1 ; ↓2 > : 6
+    | ↓1 ; ↑2 > : 7
+    | ↓1 ; ↓2 > : 8
+
+The last 8 states are odd-parity states, which are numbered as follows :
+    | 01 ; ↑2 > : 9
+    | 01 ; ↓2 > : 10
+    | D1 ; ↑2 > : 11
+    | D1 ; ↓2 > : 12
+    | ↑1 ; 02 > : 13
+    | ↑1 ; D2 > : 14
+    | ↓1 ; 02 > : 15
+    | ↓1 ; D2 > : 16
+"""
+
+struct BilayerHubbardModel{T<:Real} <: AbstractModel
+    t::T
+    U::T
+    μ::T
+    J::T
+end
+
+function _bilayer_hubbard_model(t::Real, U::Real, μ::Real, J::Real)
+    t, U, μ, J = promote(t, U, μ, J)
+    T = typeof(one(typeof(t)) / 2)
+    return BilayerHubbardModel{T}(T(t), T(U), T(μ), T(J))
+end
+
+function BilayerHubbardModel(t::T, U::T, μ::T, J::T) where {T<:Real}
+    return _bilayer_hubbard_model(t, U, μ, J)
+end
+
+function BilayerHubbardModel(t::Real, U::Real, μ::Real, J::Real)
+    return _bilayer_hubbard_model(t, U, μ, J)
+end
+
+const _BILAYER_HUBBARD_LOCAL_OCCUPATIONS = NTuple{4, Int}[
+    (0, 0, 0, 0), 
+    (0, 0, 1, 1), 
+    (1, 1, 0, 0), 
+    (1, 1, 1, 1), 
+    (1, 0, 1, 0), 
+    (1, 0, 0, 1), 
+    (0, 1, 1, 0), 
+    (0, 1, 0, 1), 
+    (0, 0, 1, 0), 
+    (0, 0, 0, 1), 
+    (1, 1, 1, 0), 
+    (1, 1, 0, 1), 
+    (1, 0, 0, 0), 
+    (1, 0, 1, 1), 
+    (0, 1, 0, 0), 
+    (0, 1, 1, 1)]
+
+function _fermion_creation_matrix(
+    ::Type{T}, 
+    occupations::AbstractVector{<:Tuple}, 
+    mode::Int) where {T}
+
+    index_of = Dict(occ => i for (i, occ) in enumerate(occupations))
+    C = zeros(T, length(occupations), length(occupations))
+    @inbounds for (col, occ) in enumerate(occupations)
+        occ[mode] == 1 && continue
+        sign_exponent = mode == 1 ? 0 : sum(occ[k] for k in 1:(mode - 1))
+        new_occ = collect(occ)
+        new_occ[mode] = 1
+        C[index_of[Tuple(new_occ)], col] = isodd(sign_exponent) ? -one(T) : one(T)
+    end
+
+    return C
+end
+
+function _bilayer_hubbard_local_number(::Type{T}, mode::Int) where {T}
+    Cdag = _fermion_creation_matrix(T, _BILAYER_HUBBARD_LOCAL_OCCUPATIONS, mode)
+    return Cdag * transpose(Cdag)
+end
+
+function _bilayer_hubbard_global_occupations()
+
+    return NTuple{8, Int}[(left..., right...) 
+    for right in _BILAYER_HUBBARD_LOCAL_OCCUPATIONS for left in _BILAYER_HUBBARD_LOCAL_OCCUPATIONS]
+end
+
+function nu1_site_Fock_basis(model::BilayerHubbardModel{T}) where {T}
+    return _bilayer_hubbard_local_number(T, 1)
+end
+
+function nd1_site_Fock_basis(model::BilayerHubbardModel{T}) where {T}
+    return _bilayer_hubbard_local_number(T, 2)
+end
+
+function nu2_site_Fock_basis(model::BilayerHubbardModel{T}) where {T}
+    return _bilayer_hubbard_local_number(T, 3)
+end
+
+function nd2_site_Fock_basis(model::BilayerHubbardModel{T}) where {T}
+    return _bilayer_hubbard_local_number(T, 4)
+end
+
+function n1_site_Fock_basis(model::BilayerHubbardModel{T}) where {T}
+    return nu1_site_Fock_basis(model) + nd1_site_Fock_basis(model)
+end
+
+function n1_site(model::BilayerHubbardModel)
+    n1_coef = n1_site_Fock_basis(model)
+    n_site_out = Grassmann(n1_coef, (16, 16), (8, 8), (:out, :in))
+end
+
+function n2_site_Fock_basis(model::BilayerHubbardModel{T}) where {T}
+    return nu2_site_Fock_basis(model) + nd2_site_Fock_basis(model)
+end
+
+function n2_site(model::BilayerHubbardModel)
+    n2_coef = n2_site_Fock_basis(model)
+    n_site_out = Grassmann(n2_coef, (16, 16), (8, 8), (:out, :in))
+end
+
+function n_site_Fock_basis(model::BilayerHubbardModel{T}) where {T}
+    return nu1_site_Fock_basis(model) + nd1_site_Fock_basis(model) + 
+    nu2_site_Fock_basis(model) + nd2_site_Fock_basis(model)
+end
+
+function n_site(model::BilayerHubbardModel)
+    n_coef = n_site_Fock_basis(model)
+    n_site_out = Grassmann(n_coef, (16, 16), (8, 8), (:out, :in))
+end
+
+function nn_bond_Fock_basis(model::BilayerHubbardModel{T}) where {T}
+
+    occupations = _bilayer_hubbard_global_occupations()
+    Cdag = [_fermion_creation_matrix(T, occupations, mode) for mode in 1:8]
+    C = transpose.(Cdag)
+    n = [Cdag[mode] * C[mode] for mode in 1:8]
+    I256 = Matrix{T}(I, 256, 256)
+
+    H_coef_mat = zeros(T, 256, 256)
+
+    for mode in 1:4
+        H_coef_mat .+= -model.t .* (Cdag[mode] * C[mode + 4] + Cdag[mode + 4] * C[mode])
+    end
+
+    half = one(T) / 2
+
+    for offset in (0, 4)
+        for (up, down) in ((offset + 1, offset + 2), (offset + 3, offset + 4))
+            H_coef_mat .+= (model.U / 4) .* ((n[up] .- half .* I256) * (n[down] .- half .* I256))
+            H_coef_mat .+= (-model.μ / 4) .* (n[up] + n[down])
+        end
+
+        sz1 = half .* (n[offset + 1] - n[offset + 2])
+        sz2 = half .* (n[offset + 3] - n[offset + 4])
+        sp1 = Cdag[offset + 1] * C[offset + 2]
+        sm1 = Cdag[offset + 2] * C[offset + 1]
+        sp2 = Cdag[offset + 3] * C[offset + 4]
+        sm2 = Cdag[offset + 4] * C[offset + 3]
+        H_coef_mat .+= (model.J / 4) .* (sz1 * sz2 + half .* (sp1 * sm2 + sm1 * sp2))
+    end
+
+    return reshape(H_coef_mat, (16, 16, 16, 16))
+end
+
+function nn_bond(model::BilayerHubbardModel)
+
+    H_coef = nn_bond_Fock_basis(model)
+    nn_bond_out1 = Grassmann(H_coef, (16, 16, 16, 16), (8, 8, 8, 8), (:out, :out, :in, :in))
+    nn_bond_out2 = add_perm_sign(nn_bond_out1, (1, 2, 4, 3))
+end
+
+function gate(model::BilayerHubbardModel, dτ::Real)
+
+    H_coef = nn_bond_Fock_basis(model)
+    H_coef_mat = reshape(H_coef, (256, 256))
+    G_coef_mat = exp(-dτ * H_coef_mat)
+    G_coef = reshape(G_coef_mat, (16, 16, 16, 16))
+    G = Grassmann(G_coef, (16, 16, 16, 16), (8, 8, 8, 8), (:out, :out, :in, :in))
+    G_out = add_perm_sign(G, (1, 2, 4, 3))
+end
 
 ############################# Relativistic fermions #############################
 
